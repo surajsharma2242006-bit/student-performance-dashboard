@@ -1,6 +1,5 @@
 """Student Performance Dashboard — run with: streamlit run 'python project.py'"""
 import json
-import sqlite3
 from pathlib import Path
 
 import joblib
@@ -10,8 +9,8 @@ import plotly.express as px
 import streamlit as st
 
 BASE = Path(__file__).resolve().parent
-DATA, MODEL, METRICS, DB = (BASE / name for name in
-                           ("students.csv", "student_model.joblib", "metrics.json", "student_records.db"))
+DATA, MODEL, METRICS = (BASE / name for name in
+                        ("students.csv", "student_model.joblib", "metrics.json"))
 GENDERS = ["Female", "Male", "Other"]
 DEFAULTS = dict(student_id="STU0000", age=20, gender="Other", attendance=75., study_hours=10.,
                 previous_marks=70., assignment_score=75., midterm_score=70., internal_score=70.,
@@ -99,11 +98,6 @@ def train():
 def get_model(): return load_model() if MODEL.exists() else train()[0]
 
 
-def setup_database():
-    with sqlite3.connect(DB) as con:
-        con.execute("CREATE TABLE IF NOT EXISTS predictions (student_id TEXT, name TEXT, predicted_score REAL, category TEXT, risk TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
-
-
 def category(score): return next((label for limit, label in [(50, "Poor"), (65, "Average"), (80, "Good")] if score < limit), "Excellent")
 
 
@@ -130,15 +124,17 @@ def predict(payload):
 
 def main():
     st.set_page_config(page_title="Student Performance Dashboard", page_icon="🎓", layout="wide")
-    setup_database()
+    # Keep prediction history in the visitor's session only. Public visitors' data
+    # must not be persisted to disk or shared with other visitors.
+    st.session_state.setdefault("prediction_history", [])
     page = st.sidebar.radio("Navigation", ["Dashboard", "Individual Prediction", "Batch CSV", "History", "Model Analytics"])
     if page == "Dashboard":
         _, data, _ = train() if not DATA.exists() else (get_model(), pd.read_csv(DATA), None)
         st.title("🎓 Student Performance Dashboard")
-        with sqlite3.connect(DB) as con:
-            count = con.execute("SELECT COUNT(DISTINCT student_id) FROM predictions").fetchone()[0]
-            average = con.execute("SELECT AVG(predicted_score) FROM predictions").fetchone()[0] or 0
-        a, b, c = st.columns(3); a.metric("Tracked Students", count); b.metric("Average Prediction", f"{average:.1f}"); c.metric("Training Rows", len(data))
+        history = st.session_state.prediction_history
+        count = len({row["student_id"] for row in history})
+        average = np.mean([row["predicted_score"] for row in history]) if history else 0
+        a, b, c = st.columns(3); a.metric("Students Predicted This Session", count); b.metric("Session Average", f"{average:.1f}"); c.metric("Training Rows", len(data))
         a, b = st.columns(2)
         a.plotly_chart(px.histogram(data, x="final_marks", title="Final Marks Distribution"), use_container_width=True)
         b.plotly_chart(px.scatter(data, x="attendance", y="final_marks", title="Attendance vs Final Marks"), use_container_width=True)
@@ -146,7 +142,8 @@ def main():
         st.title("Individual Prediction")
         with st.form("prediction"):
             a, b, c = st.columns(3)
-            student_id = a.text_input("Student ID", "STU1001"); name = b.text_input("Student Name", "Jane Doe")
+            student_id = a.text_input("Student ID", "STU1001")
+            b.caption("Predictions stay in this browser session and are cleared when it ends.")
             gender = c.selectbox("Gender", GENDERS); age = a.number_input("Age", 10, 100, 20)
             attendance = b.slider("Attendance (%)", 0., 100., 85.); study_hours = c.number_input("Weekly Study Hours", 0., 168., 15.)
             previous_marks = a.slider("Previous Marks", 0., 100., 75.); assignment_score = b.slider("Assignment Score", 0., 100., 80.)
@@ -158,8 +155,12 @@ def main():
                 previous_marks=previous_marks, assignment_score=assignment_score, midterm_score=midterm_score,
                 internal_score=internal_score, participation=participation, previous_gpa=previous_gpa, failed_subjects=failed_subjects)
             score, label, risk = predict(payload)
-            with sqlite3.connect(DB) as con:
-                con.execute("INSERT INTO predictions (student_id,name,predicted_score,category,risk) VALUES (?,?,?,?,?)", (student_id, name, score, label, risk))
+            st.session_state.prediction_history.insert(0, {
+                "student_id": student_id,
+                "predicted_score": score,
+                "category": label,
+                "risk": risk,
+            })
             a, b, c = st.columns(3); a.metric("Predicted Score", f"{score}/100"); b.metric("Category", label); c.metric("Risk", risk)
     elif page == "Batch CSV":
         st.title("Batch CSV Prediction"); upload = st.file_uploader("Upload a CSV with student feature columns", type="csv")
@@ -170,11 +171,11 @@ def main():
             output = pd.DataFrame(rows, columns=["Predicted Score", "Category", "Risk"]); output.insert(0, "student_id", batch.student_id.astype(str))
             st.dataframe(output, use_container_width=True); st.download_button("Download results", output.to_csv(index=False), "predictions.csv")
     elif page == "History":
-        st.title("Prediction History"); student_id = st.text_input("Student ID", "STU1001")
-        if st.button("Show History"):
-            with sqlite3.connect(DB) as con:
-                history = pd.read_sql_query("SELECT * FROM predictions WHERE student_id=? ORDER BY created_at DESC", con, params=[student_id])
-            st.dataframe(history if not history.empty else pd.DataFrame({"Message": ["No history found."]}), use_container_width=True)
+        st.title("Prediction History")
+        student_id = st.text_input("Filter by Student ID")
+        history = [row for row in st.session_state.prediction_history
+                   if not student_id.strip() or row["student_id"] == student_id.strip()]
+        st.dataframe(history if history else pd.DataFrame({"Message": ["No predictions in this session."]}), use_container_width=True)
     else:
         st.title("Model Analytics")
         if st.button("Retrain model"):

@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+student_records.db
+.venv/
+venv/
+.streamlit/secrets.toml
