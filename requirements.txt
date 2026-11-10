@@ -1,5 +1,6 @@
-streamlit
+streamlit[auth]
 numpy
 pandas
 plotly
 joblib
+reportlab
