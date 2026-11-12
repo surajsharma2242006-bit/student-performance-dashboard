@@ -208,7 +208,7 @@ def assistant_reply(prompt, data):
 
 
 def main():
-    st.set_page_config(page_title="Student Performance Dashboard", page_icon="🎓", layout="wide")
+    st.set_page_config(page_title="Student Performance Dashboard", page_icon=":material/school:", layout="wide")
     auth_enabled = configured_auth()
     if auth_enabled and not st.user.is_logged_in:
         st.title("Sign in to Student Insights")
@@ -226,7 +226,7 @@ def main():
     st.session_state.setdefault("prediction_history", [])
     st.session_state.setdefault("student_records", {})
     st.session_state.setdefault("chat_messages", [])
-    st.sidebar.title("🎓 Student Insights")
+    st.sidebar.title("Student Insights", icon=":material/school:")
     if auth_enabled:
         st.sidebar.caption(f"Signed in as {user['name']}")
         if st.sidebar.button("Sign out", icon=":material/logout:"):
@@ -239,8 +239,8 @@ def main():
         pages += ["Model Analytics", "Admin Console"]
     page = st.sidebar.radio("Go to", pages)
     if page == "Dashboard":
-        st.title("🎓 Student Performance Dashboard")
-        st.caption("Explore cohort outcomes, assessment patterns, and indicators for supportive follow-up.")
+        st.title("Student performance dashboard", icon=":material/school:")
+        st.caption("A planner-inspired overview of cohort progress, study habits, and supportive follow-up.")
         with st.sidebar:
             st.markdown("#### Dashboard filters")
             genders = sorted(data["gender"].dropna().astype(str).unique())
@@ -254,7 +254,7 @@ def main():
             st.info("No rows match the selected filters.")
         filtered["performance_band"] = filtered["final_marks"].map(category)
         band_order = ["Poor", "Average", "Good", "Excellent"]
-        band_colors = {"Poor": "#e76f51", "Average": "#e9a23b", "Good": "#4c9f70", "Excellent": "#5470c6"}
+        band_colors = {"Poor": "#E17878", "Average": "#D9A441", "Good": "#3D9D8F", "Excellent": "#6750D8"}
         cohort_size = len(filtered)
         mean_score = float(filtered["final_marks"].mean()) if cohort_size else 0
         median_score = float(filtered["final_marks"].median()) if cohort_size else 0
@@ -315,6 +315,8 @@ def main():
                           "midterm_score": "Midterm", "internal_score": "Internal"}
                 assessment = filtered[columns].rename(columns=labels).melt(var_name="Assessment", value_name="Score")
                 fig = px.box(assessment, x="Assessment", y="Score", color="Assessment", points=False,
+                             color_discrete_map={"Previous marks": "#6750D8", "Assignment": "#3D9D8F",
+                                                 "Midterm": "#D9A441", "Internal": "#E17878"},
                              labels={"Score": "Score (out of 100)"})
                 fig.update_layout(showlegend=False, yaxis_range=[0, 100], margin=dict(t=15, b=10))
                 st.plotly_chart(fig, width="stretch", key="dashboard_assessment",
