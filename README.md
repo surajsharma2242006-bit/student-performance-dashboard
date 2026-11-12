@@ -5,6 +5,7 @@ An interactive Streamlit website for exploring student performance data and tryi
 ## Features
 
 - Filterable cohort dashboard with performance bands and supportive check-in indicators.
+- Planner-inspired lavender and teal styling with coordinated charts and rounded dashboard panels.
 - Individual and batch predictions, session-only student records, and prediction history.
 - Downloadable PDF summaries for individual predictions.
 - Study assistant with an offline dashboard helper and optional OpenAI chat.
